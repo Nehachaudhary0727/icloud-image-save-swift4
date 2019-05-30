@@ -1,0 +1,124 @@
+import UIKit
+import RxSwift
+class RxSwiftViewController: UIViewController {
+    private let apiClient = APIClient1()
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        
+        var request = UniversityRequest(name: "ind")
+        let result : Observable<[UniversityModel]> = self.apiClient.send(apiRequest: request)
+        var data : = result.subscribe(onNext: { todoList in
+            print("TodoList: \(todoList)")
+            //update view with todos
+        }, onError: { (error) in
+            print(error.localizedDescription)
+        })
+        print(result)
+        // Do any additional setup after loading the view.
+    }
+    
+
+    /*
+    // MARK: - Navigation
+
+    // In a storyboard-based application, you will often want to do a little preparation before navigation
+    override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
+        // Get the new view controller using segue.destination.
+        // Pass the selected object to the new view controller.
+    }
+    */
+
+}
+
+class APIClient1 {
+    private let baseURL = URL(string: "http://universities.hipolabs.com/")!
+    
+    func send<T: Codable>(apiRequest: APIRequest) -> Observable<T> {
+        return Observable<T>.create { [unowned self] observer in
+            let request = apiRequest.request(with: self.baseURL)
+            let task = URLSession.shared.dataTask(with: request) { (data, response, error) in
+                do {
+                    let model: T = try JSONDecoder().decode(T.self, from: data ?? Data())
+                    observer.onNext(model)
+                } catch let error {
+                    observer.onError(error)
+                }
+                observer.onCompleted()
+            }
+            task.resume()
+            
+            return Disposables.create {
+                task.cancel()
+            }
+        }
+    }
+}
+//if let e = error {
+//    observer.onError(e)
+//} else if let r = response as? HTTPURLResponse {
+//    if(r.statusCode >= 200 && r.statusCode < 300) {
+//        if let d = data {
+//            observer.onNext(Response(data: d, response: r))
+//        } else {
+//            observer.onNext(Response(data: Data(), response: r))
+//        }
+//    } else {
+//        observer.onError(ResponseError(data: Data(), response: r))
+//    }
+//} else {
+//    observer.onError(ResponseError(data: Data(), response: HTTPURLResponse()))
+//}
+
+public enum RequestType: String {
+    case GET, POST
+}
+
+protocol APIRequest {
+    var method: RequestType { get }
+    var path: String { get }
+    var parameters: [String : String] { get }
+}
+
+extension APIRequest {
+    func request(with baseURL: URL) -> URLRequest {
+        guard var components = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false) else {
+            fatalError("Unable to create URL components")
+        }
+        
+        components.queryItems = parameters.map {
+            URLQueryItem(name: String($0), value: String($1))
+        }
+        
+        guard let url = components.url else {
+            fatalError("Could not get url")
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = method.rawValue
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        return request
+    }
+}
+
+struct UniversityModel: Codable {
+    let name: String
+    let webPages: [String]?
+    let country: String
+    
+    private enum CodingKeys: String, CodingKey {
+        case name
+        case webPages = "web_pages"
+        case country
+    }
+    
+    var description: String {
+        get {
+            if let webPage = webPages?.first {
+                return "\(country) • \(webPage)"
+            } else {
+                return country
+            }
+        }
+    }
+}
